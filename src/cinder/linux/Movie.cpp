@@ -244,6 +244,13 @@ void MovieBase::stop()
     mGstPlayer->stop();
 }
 
+signals::Signal<void()>&	MovieBase::getNewFrameSignal() { return mGstPlayer->getNewFrameSignal(); }
+signals::Signal<void()>&	MovieBase::getReadySignal() { return mGstPlayer->getReadySignal(); }
+signals::Signal<void()>&	MovieBase::getCancelledSignal() { return mGstPlayer->getCancelledSignal(); }
+signals::Signal<void()>&	MovieBase::getEndedSignal() { return mGstPlayer->getEndedSignal() ; }
+signals::Signal<void()>&	MovieBase::getJumpedSignal() { return mGstPlayer->getJumpedSignal(); }
+signals::Signal<void()>&	MovieBase::getOutputWasFlushedSignal() { return mGstPlayer->getOutputWasFlushedSignal(); }
+
 //! \class MovieGl
 //!
 //!

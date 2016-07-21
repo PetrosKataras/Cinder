@@ -19,6 +19,7 @@
 
 #include "cinder/gl/Texture.h"
 #include "cinder/gl/Context.h"
+#include "cinder/Signals.h"
 
 #if GST_CHECK_VERSION(1, 4, 5)
 	#include <gst/gl/gstglconfig.h>
@@ -174,6 +175,13 @@ public:
 
 	ci::gl::Texture2dRef	getVideoTexture();
 
+    ci::signals::Signal<void()>&	getNewFrameSignal() { return mSignalNewFrame; }
+    ci::signals::Signal<void()>&	getReadySignal() { return mSignalReady; }
+    ci::signals::Signal<void()>&	getCancelledSignal() { return mSignalCancelled; }
+    ci::signals::Signal<void()>&	getEndedSignal() { return mSignalEnded; }
+    ci::signals::Signal<void()>&	getJumpedSignal() { return mSignalJumped; }
+    ci::signals::Signal<void()>&	getOutputWasFlushedSignal() { return mSignalOutputWasFlushed; }
+
 private:		
 	bool 					initializeGStreamer();
 
@@ -185,7 +193,12 @@ private:
 	static void 			onGstEos( GstAppSink* sink, gpointer userData );
 	static GstFlowReturn 	onGstSample( GstAppSink* sink, gpointer userData );
 	static GstFlowReturn	onGstPreroll( GstAppSink* sink, gpointer userData );
-	void 					processNewSample( GstSample* sample );
+
+    // ..and forwarded to the following.
+    void 					eos();
+    void                    ready();
+
+    void 					processNewSample( GstSample* sample );
 	void 					getVideoInfo( const GstVideoInfo& videoInfo );
 	
 	bool 					setPipelineState( GstState targetState );
@@ -233,6 +246,9 @@ private:
 	std::atomic<bool> 		mNewFrame;
 	std::atomic<bool>		mUnblockStreamingThread;
 	std::condition_variable	mStreamingThreadCV;
+
+    ci::signals::Signal<void()>		mSignalNewFrame, mSignalReady, mSignalCancelled, mSignalEnded, mSignalJumped, mSignalOutputWasFlushed;
+
 };
-	
+
 }} // namespace gst::video

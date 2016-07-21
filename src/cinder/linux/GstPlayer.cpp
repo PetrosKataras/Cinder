@@ -120,7 +120,7 @@ gboolean checkBusMessages( GstBus* bus, GstMessage* message, gpointer userData )
 	}
 
 	GstData & data = *( static_cast<GstData*>( userData ) );
-	
+
 	switch ( GST_MESSAGE_TYPE( message ) )
 	{
 		case GST_MESSAGE_ERROR: {
@@ -223,6 +223,7 @@ gboolean checkBusMessages( GstBus* bus, GstMessage* message, gpointer userData )
 				gst_message_parse_state_changed( message, &old, &current, &pending );
 				if( old != current ) {
 					g_print( "Pipeline state changed from : %s to %s with pending %s\n", gst_element_state_get_name( old ), gst_element_state_get_name ( current ), gst_element_state_get_name( pending) );
+
 				}
 
 				data.updateState(  current );
@@ -1047,6 +1048,8 @@ void GstPlayer::resetSystemMemoryBuffers()
 
 void GstPlayer::onGstEos( GstAppSink* sink, gpointer userData )
 {
+    GstPlayer* me = static_cast<GstPlayer*>( userData );
+    me->eos();
 }
 
 GstFlowReturn GstPlayer::onGstPreroll( GstAppSink* sink, gpointer userData )
@@ -1054,6 +1057,15 @@ GstFlowReturn GstPlayer::onGstPreroll( GstAppSink* sink, gpointer userData )
 	GstPlayer* me = static_cast<GstPlayer*>( userData );
 	me->processNewSample( gst_app_sink_pull_preroll( sink ) );
 	return GST_FLOW_OK;
+}
+void GstPlayer::eos()
+{
+    mSignalEnded.emit();
+}
+
+void GstPlayer::ready()
+{
+    mSignalReady.emit();
 }
 
 GstFlowReturn GstPlayer::onGstSample( GstAppSink* sink, gpointer userData )
