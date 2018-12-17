@@ -57,9 +57,6 @@ function(ci_emscripten_app)
             # note that this will disable ci::app::loadAsset and you will have to rely on async functions. 
             NO_ASYNC
 
-            # Sepecifies the type of build you want to do, either "Debug" or "Release"
-            BUILD_TYPE
-
             # argument to tell emscripten to bundle resources
             RESOURCES
 
@@ -86,16 +83,16 @@ function(ci_emscripten_app)
     message( "CMAKE_RUNTIME_OUTPUT_DIRECTORY: ${CMAKE_BINARY_DIR}/${CMAKE_RUNTIME_OUTPUT_DIRECTORY}" )
     message( "CINDER_BUILD_TYPE: ${CMAKE_BUILD_TYPE}" )
 
-    if (ARG_RESOURCES)
+    if( ARG_RESOURCES )
         message( "Resources folder is set to ${ARG_RESOURCES}" )
-    endif ()    
+    endif()    
         
-    if (ARG_ASSETS)
+    if( ARG_ASSETS )
         message("Assets folder is set to ${ARG_ASSETS}")
-    endif ()    
+    endif()    
     message("\n")
 
-    set(CINDER_INCLUDE_DIR ${CINDER_DIR}/include)
+    set( CINDER_INCLUDE_DIR ${CINDER_DIR}/include )
 
     # ========= SETUP BUILD ============== #
     get_filename_component( CINDER_DIR "${ARG_CINDER_PATH}" ABSOLUTE PARENT_SCOPE)
@@ -105,106 +102,104 @@ function(ci_emscripten_app)
 	include( "${CINDER_DIR}/proj/cmake/platform_emscripten.cmake" )
 
     # this is important, if not set you will only get JS files.
-    if(NOT ARG_BUILD_AS_WORKER)
-        set(CMAKE_EXECUTABLE_SUFFIX ".html" PARENT_SCOPE)
+    if( NOT ARG_BUILD_AS_WORKER )
+        set( CMAKE_EXECUTABLE_SUFFIX ".html" PARENT_SCOPE )
     endif()
 
     # append core flags
-    set(CXX_FLAGS "${CXX_FLAGS} --bind")
+    set( CXX_FLAGS "${CXX_FLAGS} --bind" )
 
-    if(NOT ARG_BUILD_AS_WORKER)
-        set(CXX_FLAGS "${CXX_FLAGS} ${CINDER_JS_HELPERS}")
+    if( NOT ARG_BUILD_AS_WORKER )
+        set( CXX_FLAGS "${CXX_FLAGS} ${CINDER_JS_HELPERS}" )
     endif()
    
     # if user wants to build as a worker
-    if (ARG_BUILD_AS_WORKER)
-      set(CXX_FLAGS "${CXX_FLAGS} ${BUILD_AS_WORKER}")
+    if( ARG_BUILD_AS_WORKER )
+      set( CXX_FLAGS "${CXX_FLAGS} ${BUILD_AS_WORKER}" )
     endif()
 
    
-    set(CXX_FLAGS "${CXX_FLAGS} ${ALLOW_MEMORY_GROWTH}")
+    set( CXX_FLAGS "${CXX_FLAGS} ${ALLOW_MEMORY_GROWTH}" )
  
-    if(ARG_BUILD_AS_WORKER)
-        if(ARG_EXPORT_FROM_WORKER)
-            set(CXX_FLAGS "${CXX_FLAGS} -s EXPORTED_FUNCTIONS=[${ARG_EXPORT_FROM_WORKER}]")
+    if( ARG_BUILD_AS_WORKER )
+        if( ARG_EXPORT_FROM_WORKER )
+            set( CXX_FLAGS "${CXX_FLAGS} -s EXPORTED_FUNCTIONS=[${ARG_EXPORT_FROM_WORKER}]" )
         else()
-            message(ERROR " In order to use web workers, you need to expose functions from your worker to your main application" )
+            message( ERROR " In order to use web workers, you need to expose functions from your worker to your main application" )
         endif()
     endif()
     
      # Emscripten async libraries are included by default - need to test to see if user has opted out by passing in the NO_ASYNC param 
-    if(NOT ARG_NO_ASYNC)
-      set(CXX_FLAGS "${CXX_FLAGS} -s EMTERPRETIFY=1 -s EMTERPRETIFY_FILE=${CMAKE_BINARY_DIR}/em.data.binary -s EMTERPRETIFY_ASYNC=1")  
+    if( NOT ARG_NO_ASYNC )
+      set( CXX_FLAGS "${CXX_FLAGS} -s EMTERPRETIFY=1 -s EMTERPRETIFY_FILE=${CMAKE_BINARY_DIR}/em.data.binary -s EMTERPRETIFY_ASYNC=1" )  
     endif()
 
     # also turn off async libs if building web worker.
-    if(ARG_BUILD_AS_WORKER)
-      set(CXX_FLAGS "${CXX_FLAGS} -s EMTERPRETIFY=0 -s EMTERPRETIFY_ASYNC=0")  
+    if( ARG_BUILD_AS_WORKER )
+      set( CXX_FLAGS "${CXX_FLAGS} -s EMTERPRETIFY=0 -s EMTERPRETIFY_ASYNC=0" )
     endif()
 
     # if custom html template is wanted, use that, otherwise, use default 
-    if(ARG_HTML_TEMPLATE)
-        set(CXX_FLAGS "${CXX_FLAGS} --shell-file ${ARG_HTML_TEMPLATE}")
+    if( ARG_HTML_TEMPLATE )
+        set( CXX_FLAGS "${CXX_FLAGS} --shell-file ${ARG_HTML_TEMPLATE}" )
     else()
-        set(CXX_FLAGS "${CXX_FLAGS} --shell-file ${CINDER_DIR}/emscripten/shell.html")
+        set( CXX_FLAGS "${CXX_FLAGS} --shell-file ${CINDER_DIR}/proj/cmake/emscripten/shell.html" )
     endif()
 
     # if we need assertations set flags
-    if(ARG_MEMORY_DEBUG)
-        set(CXX_FLAGS "${CXX_FLAGS} -s ASSERTIONS=1 -s SAFE_HEAP=1")
+    if( ARG_MEMORY_DEBUG )
+        set( CXX_FLAGS "${CXX_FLAGS} -s ASSERTIONS=1 -s SAFE_HEAP=1" )
     endif()
     
     # if FLAGS parameter is set, append additional flags. 
-    if(ARG_FLAGS)
-        set(CXX_FLAGS "${CXX_FLAGS} ${ARG_FLAGS}")
+    if( ARG_FLAGS )
+        set( CXX_FLAGS "${CXX_FLAGS} ${ARG_FLAGS}" )
     endif()
 
      # if building release add some extra flags to optimize final bundle. 
     # see https://kripken.github.io/emscripten-site/docs/optimizing/Optimizing-Code.html for other tips on optimizing code.
     if( "Release" STREQUAL "${CMAKE_BUILD_TYPE}" )
-        
-        set(CXX_FLAGS "${CXX_FLAGS} ${CMAKE_CXX_FLAGS_RELEASE}")
-        set(CXX_FLAGS "${CXX_FLAGS} ${ADD_OPTIMIZATIONS}")
-        set(CXX_FLAGS "${CXX_FLAGS} ${CMAKE_CXX_FLAGS_RELEASE}")
-        list(APPEND EMCC_CLOSURE_ARGS "--externs ${CINDER_INCLUDE_DIR}/cinder/emscripten/externs.js")
-     
+        set( CXX_FLAGS "${CXX_FLAGS} ${CMAKE_CXX_FLAGS_RELEASE}" )
+        set( CXX_FLAGS "${CXX_FLAGS} ${ADD_OPTIMIZATIONS}" )
+        set( CXX_FLAGS "${CXX_FLAGS} ${CMAKE_CXX_FLAGS_RELEASE}" )
+        list( APPEND EMCC_CLOSURE_ARGS "--externs ${CINDER_INCLUDE_DIR}/cinder/emscripten/externs.js" )
     endif()
     # =========== ADD OTHER OPTIONAL FLAGS ================ #
 
     # if we have resources to bundle, build and append flags for that
-    if (ARG_RESOURCES)
-        message(WARNING "Note that some resources(really large media files), while it is possible to bundle, they may not load as expected." )
-        set(CXX_FLAGS "${CXX_FLAGS} --preload-file ${ARG_RESOURCES}@")
+    if( ARG_RESOURCES )
+        message( WARNING "Note that some resources(really large media files), while it is possible to bundle, they may not load as expected." )
+        set( CXX_FLAGS "${CXX_FLAGS} --preload-file ${ARG_RESOURCES}@" )
     endif ()
 
 
     # if user wants to use browser for decoding media. 
-    if(ARG_BROWSER_DECODE)
-      set(CXX_FLAGS "${CXX_FLAGS} ${USE_BROWSER_FOR_DECODING}")
+    if( ARG_BROWSER_DECODE )
+      set( CXX_FLAGS "${CXX_FLAGS} ${USE_BROWSER_FOR_DECODING}" )
     endif()
 
 
   # if user wants threading support.
-    if(ARG_THREADS)
-        message(STATUS "Note that threads require SharedArrayBuffer object which may/may not be disabled in your browser. \n See https://kripken.github.io/emscripten-site/docs/porting/pthreads.html for more information.")
-        set(CXX_FLAGS "${CXX_FLAGS} ${USE_THREADS}")
+    if( ARG_THREADS )
+        message( STATUS "Note that threads require SharedArrayBuffer object which may/may not be disabled in your browser. \n See https://kripken.github.io/emscripten-site/docs/porting/pthreads.html for more information." )
+        set( CXX_FLAGS "${CXX_FLAGS} ${USE_THREADS}" )
 
         if( NOT ARG_THREAD_POOL_SIZE )
-            set(CXX_FLAGS "${CXX_FLAGS} -s PTHREAD_POOL_SIZE=-1")
+            set( CXX_FLAGS "${CXX_FLAGS} -s PTHREAD_POOL_SIZE=-1" )
         endif()
 
         if( NOT ARG_THREAD_NUM_CORES )
-            set(CXX_FLAGS "${CXX_FLAGS} -s PTHREAD_HINT_NUM_CORES=-1")
+            set( CXX_FLAGS "${CXX_FLAGS} -s PTHREAD_HINT_NUM_CORES=-1" )
         endif()
     endif()
 
-    message("Current flags for build are : \n ${CXX_FLAGS} \n")
+    message( "Current flags for build are : \n ${CXX_FLAGS} \n" )
 
 
     # ========== COMPILE ALL FLAGS TOGETHER ============== # 
 
     # compile all necessary flags
-    set(CMAKE_EXE_LINKER_FLAGS "${CXX_FLAGS} ${CINDER_EMSCRIPTEN_LINK_FLAGS}" PARENT_SCOPE)
+    set( CMAKE_EXE_LINKER_FLAGS "${CXX_FLAGS} ${CINDER_EMSCRIPTEN_LINK_FLAGS}" PARENT_SCOPE )
 
 
     # ========= COMPILE ALL BUILD PARAMETERS TOGETHER ============= #
@@ -216,13 +211,13 @@ function(ci_emscripten_app)
 		)
 	endif()
 
-    if(ARG_OUTPUT_NAME)
-        set(OUTPUT_NAME "${ARG_OUTPUT_NAME}")
+    if( ARG_OUTPUT_NAME )
+        set( OUTPUT_NAME "${ARG_OUTPUT_NAME}" )
     else()
-        set(OUTPUT_NAME "index")
+        set( OUTPUT_NAME "index" )
     endif()
 
-    add_executable(${OUTPUT_NAME} ${ARG_SOURCES} )
+    add_executable( ${OUTPUT_NAME} ${ARG_SOURCES} )
     target_include_directories(
             ${OUTPUT_NAME} 
             # TODO check to if PUBLIC specifier works if multiple files are specified, otherwise we'll need to manually do this. 
@@ -230,10 +225,10 @@ function(ci_emscripten_app)
     )
 
     # if a specific output directory is specified make sure to tell cmake 
-    if(ARG_OUTPUT_DIRECTORY)
-        set_target_properties(${OUTPUT_NAME}  PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${ARG_OUTPUT_DIRECTORY})
+    if( ARG_OUTPUT_DIRECTORY )
+        set_target_properties( ${OUTPUT_NAME}  PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${ARG_OUTPUT_DIRECTORY} )
     endif()
-	message( STATUS "HERE: " ${EMSCRIPTEN_LIB_DIRECTORY} )
+
     target_link_libraries(
             ${OUTPUT_NAME} 
             ${EMSCRIPTEN_LIB_DIRECTORY}/libboost_filesystem.bc
@@ -243,8 +238,8 @@ function(ci_emscripten_app)
     )
 
     # copy assets to build folder.
-    if(ARG_ASSETS)
-        file(INSTALL ${ARG_ASSETS} DESTINATION "${CMAKE_BINARY_DIR}/${CMAKE_BUILD_TYPE}")
+    if( ARG_ASSETS )
+        file( INSTALL ${ARG_ASSETS} DESTINATION "${CMAKE_BINARY_DIR}/${CMAKE_BUILD_TYPE}" )
     endif()
 
     
