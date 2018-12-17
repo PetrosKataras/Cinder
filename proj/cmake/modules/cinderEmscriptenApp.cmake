@@ -101,6 +101,9 @@ function(ci_emscripten_app)
 	include( "${CINDER_DIR}/proj/cmake/configure.cmake" )
 	include( "${CINDER_DIR}/proj/cmake/platform_emscripten.cmake" )
 
+	# set variable for helper file when handling DOM related stuff. This should be a part of the --pre-js Emscripten flag
+	set( CINDER_JS_HELPERS "--pre-js ${CINDER_DIR}/include/cinder/emscripten/helpers.js" )
+
     # this is important, if not set you will only get JS files.
     if( NOT ARG_BUILD_AS_WORKER )
         set( CMAKE_EXECUTABLE_SUFFIX ".html" PARENT_SCOPE )
@@ -239,7 +242,7 @@ function(ci_emscripten_app)
 
     # copy assets to build folder.
     if( ARG_ASSETS )
-        file( INSTALL ${ARG_ASSETS} DESTINATION "${CMAKE_BINARY_DIR}/${CMAKE_BUILD_TYPE}" )
+        file( INSTALL ${ARG_ASSETS} DESTINATION "${CMAKE_BINARY_DIR}" )
     endif()
 
     
