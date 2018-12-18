@@ -409,7 +409,7 @@ window.CINDER_FILEIO = {
     var context = window.CINDER_AUDIO.globalContext;
 
     context.audioWorklet.addModule(this.sourceToBlob(source)).then(cb)
-      .catch( e => {
+      .catch( function() {
         console.error("There was an error loading the processor");
       });
   }
@@ -418,28 +418,6 @@ window.CINDER_FILEIO = {
 
 // =================== TESTING =======================//
 
-/**
- * A custom AudioWorklet node. When the main AudioWorkletProcessor receives information, 
- * the _handleMessage function will get called which in turn will call the process() function
- * of your CustomNode instance. 
- */
-class CustomNode extends AudioWorkletNode {
-  constructor(processingFunction){
-    super(CINDER_AUDIO.globalContext,"CinderAudioProcessor");
-    this.port.onmessage = this._handleMessage.bind(this);
-    this.processingFunction = processingFunction;
-  }
-    /**
-   * When a message is received from the procesor - send the inputs and outputs
-   * to our C++ function which should have been passed in as the "processingFunction"
-   * in the constructor
-   */ 
-  _handleMessage( e )
-  { 
-    
-      this.processingFunction( e.data );
-  }
-}
 
 window.CINDER_WORKLETS = {
 
@@ -480,7 +458,7 @@ window.CINDER_WORKLETS = {
 
     // check graph to see if any items are just functions, if they are we they are custom nodes and we need to instantiate
     // a custom AudioWorketNode
-    graph = graph.map(itm => {
+    graph = graph.map(function(itm) {
       if(itm !== undefined){
         if(typeof itm === "function"){
           return new CustomNode(itm);
