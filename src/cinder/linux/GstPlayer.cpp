@@ -936,12 +936,17 @@ void GstPlayer::seekToTime( float seconds, bool forceSeek )
 	}
 	
 	GstSeekFlags seekFlags;
-	if( ( mGstData.loop && mGstData.segmentDone ) && ! forceSeek ) {
-		seekFlags =  GstSeekFlags( GST_SEEK_FLAG_ACCURATE | GST_SEEK_FLAG_SEGMENT );
-		mGstData.segmentDone = false;
+	if( mGstData.loop && ! forceSeek ) {
+		if( mGstData.segmentDone ) {
+			seekFlags =  GstSeekFlags( GST_SEEK_FLAG_ACCURATE | GST_SEEK_FLAG_SEGMENT );
+			mGstData.segmentDone = false;
+		}
+		else {
+			seekFlags =  GstSeekFlags( GST_SEEK_FLAG_FLUSH | GST_SEEK_FLAG_ACCURATE | GST_SEEK_FLAG_SEGMENT );
+		}
 	}
 	else {
-		seekFlags =  GstSeekFlags( GST_SEEK_FLAG_FLUSH | GST_SEEK_FLAG_ACCURATE | GST_SEEK_FLAG_SEGMENT );
+		seekFlags = GstSeekFlags( GST_SEEK_FLAG_FLUSH | GST_SEEK_FLAG_ACCURATE );
 	}
 
 	auto timeToSeek = seconds*GST_SECOND;
