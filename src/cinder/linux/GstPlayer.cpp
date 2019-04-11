@@ -61,6 +61,9 @@ GstData::GstData()
 , fpsNom( -1 )
 , fpsDenom( -1 )
 , pixelAspectRatio( 0.0f )
+, segmentStart( 0.0f )
+, segmentEnd( -1.0f )
+, segmentDone( false )
 , player( nullptr )
 {
 }
@@ -101,6 +104,9 @@ void GstData::prepareForNewVideo()
 	pixelAspectRatio	= 0.0f;
 	loop				= false;
 	palindrome			= false;
+	segmentStart		= 0.0f;
+	segmentEnd			= -1.0f;
+	segmentDone			= false;
 }
 
 void GstData::updateState( const GstState& current )
@@ -121,12 +127,14 @@ void GstData::updateState( const GstState& current )
 			isPaused		= true;
 			isLoaded		= true;
 			isPlayable		= true;
+			segmentDone		= false;
 			break;
 		}
 		case GST_STATE_PLAYING: {
 			isDone			= false;
 			isPaused		= false;
 			isPlayable		= true;
+			segmentDone		= false;
 			break;
 		}
 		default: break;
@@ -265,7 +273,6 @@ gboolean checkBusMessagesAsync( GstBus* bus, GstMessage* message, gpointer userD
 				if( old != current ) {
 					CI_LOG_I( "Pipeline state changed from : " << gst_element_state_get_name( old ) << " to : " << gst_element_state_get_name ( current ) << " with pending : " <<	gst_element_state_get_name( pending) );
 				}
-
 				data.updateState(  current );
 
 				if( data.targetState != data.currentState && pending == GST_STATE_VOID_PENDING ) {
@@ -295,24 +302,30 @@ gboolean checkBusMessagesAsync( GstBus* bus, GstMessage* message, gpointer userD
 			}
 			break;
 		}
+		case GST_MESSAGE_SEGMENT_DONE: {
+			data.segmentDone = true;
+			if( data.loop && ! data.palindrome ) {
+				// If playing back on reverse start the loop from the
+				// end of the file
+				if( data.rate < 0 ){
+					if( data.player ) data.player->seekToTime( data.player->getDurationSeconds() );
+				}
+				else{
+					// otherwise restart from beginning.
+					if( data.player ) data.player->seekToTime( 0 );
+				}
+				data.videoHasChanged = false;
+			}
+			else {
+				data.isDone = true;
+			}
+			break;
+		}
 
 		case GST_MESSAGE_EOS: {
-			if( data.loop ) {
-				if( data.palindrome && ! data.isStream && ! data.isLive ) {
-					// Toggle the direction we are playing.
-					if( data.player ) data.player->setRate( -data.player->getRate() );
-				}
-				else {
-					// If playing back on reverse start the loop from the
-					// end of the file
-					if( data.rate < 0 ){
-						if( data.player ) data.player->seekToTime( data.player->getDurationSeconds() );
-					}
-					else{
-						// otherwise restart from beginning.
-						if( data.player ) data.player->seekToTime( 0 );
-					}
-				}
+			if( data.palindrome && ! data.isStream && ! data.isLive ) {
+				// Toggle the direction we are playing.
+				if( data.player ) data.player->setRate( -data.player->getRate() );
 			}
 			data.videoHasChanged = false;
 			data.isDone = true;
@@ -682,7 +695,6 @@ void GstPlayer::constructPipeline()
 	}
 
 	g_object_set( G_OBJECT( mGstData.pipeline ), "video-sink", mGstData.videoBin, nullptr );
-
 	addBusWatch( mGstData.pipeline );
 }
 
@@ -922,10 +934,18 @@ void GstPlayer::seekToTime( float seconds, bool forceSeek )
 		mGstData.requestedSeekTime = seconds;
 		return;
 	}
+	
+	GstSeekFlags seekFlags;
+	if( ( mGstData.loop && mGstData.segmentDone ) && ! forceSeek ) {
+		seekFlags =  GstSeekFlags( GST_SEEK_FLAG_ACCURATE | GST_SEEK_FLAG_SEGMENT );
+		mGstData.segmentDone = false;
+	}
+	else {
+		seekFlags =  GstSeekFlags( GST_SEEK_FLAG_FLUSH | GST_SEEK_FLAG_ACCURATE | GST_SEEK_FLAG_SEGMENT );
+	}
 
 	auto timeToSeek = seconds*GST_SECOND;
-
-	sendSeekEvent( timeToSeek );
+	sendSeekEvent( timeToSeek, seekFlags );
 }
 
 void GstPlayer::seekToFrame( int frame )
@@ -947,6 +967,13 @@ void GstPlayer::setLoop( bool loop, bool palindrome )
 {
 	mGstData.loop = loop;
 	mGstData.palindrome = palindrome;
+	if( loop && ! palindrome ) {
+		auto currentPosition = getPositionNanos();
+		if( currentPosition != -1 )
+			seekToTime( currentPosition );
+		else
+			seekToTime( 0.0f );
+	}
 }
 
 bool GstPlayer::setRate( float rate )
@@ -968,7 +995,7 @@ bool GstPlayer::setRate( float rate )
 	// We need the position in case we have switched
 	// to reverse playeback i.e rate < 0
 	gint64 timeToSeek = getPositionNanos();
-	return sendSeekEvent( timeToSeek );
+	return sendSeekEvent( timeToSeek, GstSeekFlags( GST_SEEK_FLAG_FLUSH | GST_SEEK_FLAG_ACCURATE ) );
 }
 
 float GstPlayer::getRate() const
@@ -986,16 +1013,14 @@ bool GstPlayer::isStream() const
 	return mGstData.isStream;
 }
 
-bool GstPlayer::sendSeekEvent( gint64 seekTime )
+bool GstPlayer::sendSeekEvent( gint64 seekTime, GstSeekFlags seekFlags )
 {
 	GstEvent* seekEvent;
-	GstSeekFlags seekFlags = GstSeekFlags( GST_SEEK_FLAG_FLUSH | GST_SEEK_FLAG_ACCURATE );
-
 	if( getRate() > 0.0 ) {
-		seekEvent = gst_event_new_seek( getRate(), GST_FORMAT_TIME, seekFlags, GST_SEEK_TYPE_SET, seekTime, GST_SEEK_TYPE_SET, GST_CLOCK_TIME_NONE );
+		seekEvent = gst_event_new_seek( getRate(), GST_FORMAT_TIME, seekFlags, GST_SEEK_TYPE_SET, seekTime, GST_SEEK_TYPE_SET, mGstData.segmentEnd );
 	}
 	else {
-		seekEvent = gst_event_new_seek( getRate(), GST_FORMAT_TIME, seekFlags, GST_SEEK_TYPE_SET, 0, GST_SEEK_TYPE_SET, seekTime );
+		seekEvent = gst_event_new_seek( getRate(), GST_FORMAT_TIME, seekFlags, GST_SEEK_TYPE_SET, mGstData.segmentStart, GST_SEEK_TYPE_SET, seekTime );
 	}
 
 	gboolean successSeek = gst_element_send_event( mGstData.pipeline, seekEvent );

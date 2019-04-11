@@ -101,6 +101,9 @@ struct GstData {
 	std::atomic<int> fpsNom;
 	std::atomic<int> fpsDenom;
 	std::atomic<float> pixelAspectRatio;
+	std::atomic<float> segmentStart;
+	std::atomic<float> segmentEnd;
+	std::atomic<bool> segmentDone;
 
 	GstMapInfo memoryMapInfo; // Memory map that holds the incoming frame.
 	GstVideoInfo videoInfo; // For retrieving video info.
@@ -197,7 +200,7 @@ class GstPlayer {
 		GstState getCurrentState();
 		GstState getPendingState();
 
-		bool sendSeekEvent( gint64 seekTime );
+		bool sendSeekEvent( gint64 seekTime, GstSeekFlags seekFlags );
 
 		void addBusWatch( GstElement* pipeline );
 
