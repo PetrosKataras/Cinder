@@ -936,8 +936,8 @@ void GstPlayer::seekToTime( float seconds, bool forceSeek )
 	}
 	
 	GstSeekFlags seekFlags;
-	if( mGstData.loop && ! forceSeek ) {
-		if( mGstData.segmentDone ) {
+	if( mGstData.loop ) {
+		if( mGstData.segmentDone && ! forceSeek ) {
 			seekFlags =  GstSeekFlags( GST_SEEK_FLAG_ACCURATE | GST_SEEK_FLAG_SEGMENT );
 			mGstData.segmentDone = false;
 		}
