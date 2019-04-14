@@ -975,7 +975,7 @@ void GstPlayer::setLoop( bool loop, bool palindrome )
 	if( loop && ! palindrome ) {
 		auto currentPosition = getPositionNanos();
 		if( currentPosition != -1 )
-			seekToTime( currentPosition );
+			seekToTime( GST_TIME_AS_SECONDS( currentPosition ) );
 		else
 			seekToTime( 0.0f );
 	}
