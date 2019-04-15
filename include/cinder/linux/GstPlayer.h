@@ -216,6 +216,7 @@ class GstPlayer {
 		GMainLoop* mGMainLoop; // Needed for message activation since we are not using signals.
 		GstBus* mGstBus; // Delivers the messages.
 		int mBusId; // Save the id of the bus for releasing when not needed.
+		gulong mLoopSignalHandlerId { 0 };
 		std::thread mGMainLoopThread; // Seperate thread for GMainLoop.
 
 		std::mutex mMutex; // Protect	since the appsink callbacks are executed from the streaming thread internally from GStreamer.

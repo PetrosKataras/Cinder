@@ -302,17 +302,6 @@ gboolean checkBusMessagesAsync( GstBus* bus, GstMessage* message, gpointer userD
 					// Toggle the direction we are playing.
 					if( data.player ) data.player->setRate( -data.player->getRate() );
 				}
-				else {
-					// If playing back on reverse start the loop from the
-					// end of the file
-					if( data.rate < 0 ){
-						if( data.player ) data.player->seekToTime( data.player->getDurationSeconds() );
-					}
-					else{
-						// otherwise restart from beginning.
-						if( data.player ) data.player->seekToTime( 0 );
-					}
-				}
 			}
 			data.videoHasChanged = false;
 			data.isDone = true;
@@ -414,6 +403,11 @@ void GstPlayer::resetPipeline()
 {
 	if( ! mGstData.pipeline ) {
 		return;
+	}
+
+	if( mLoopSignalHandlerId > 0 ) {
+		g_signal_handler_disconnect( mGstData.pipeline, mLoopSignalHandlerId );
+		mLoopSignalHandlerId = 0;
 	}
 
 	gst_element_set_state( mGstData.pipeline, GST_STATE_NULL );
@@ -588,11 +582,27 @@ void GstPlayer::resetCustomPipeline()
 	}
 }
 
+static void aboutToFinish( GstElement* playbin, gpointer userData )
+{
+	
+	gchar* currentUri;
+	g_object_get( G_OBJECT( playbin ), "current-uri", &currentUri, nullptr );
+	g_object_set( G_OBJECT( playbin ), "uri", currentUri, nullptr );
+	g_free( currentUri );
+}
+
 void GstPlayer::constructPipeline()
 {
 	if( mGstData.pipeline ) return;
+	
+	char* envVar = std::getenv( "USE_PLAYBIN3" );
+	if( envVar != nullptr && ( strcmp( envVar, "1" ) == 0 ) ) {
+		mGstData.pipeline	= gst_element_factory_make( "playbin3", "playbinsink" );
+	}
+	else {
+		mGstData.pipeline	= gst_element_factory_make( "playbin", "playbinsink" );
+	}
 
-	mGstData.pipeline	= gst_element_factory_make( "playbin", "playbinsink" );
 	if( ! mGstData.pipeline ) {
 		// Not much we can do without at least playbin...
 		CI_LOG_E( "Failed to create playbin pipeline!" );
@@ -945,6 +955,15 @@ bool GstPlayer::stepForward()
 
 void GstPlayer::setLoop( bool loop, bool palindrome )
 {
+	if( loop && ! palindrome ) {
+		// Always > 0 for successful connections
+		mLoopSignalHandlerId = g_signal_connect( mGstData.pipeline, "about-to-finish", G_CALLBACK( aboutToFinish ), nullptr );
+	}
+	else if( mLoopSignalHandlerId > 0 ) {
+		g_signal_handler_disconnect( mGstData.pipeline, mLoopSignalHandlerId );
+		mLoopSignalHandlerId = 0;
+	}
+
 	mGstData.loop = loop;
 	mGstData.palindrome = palindrome;
 }
