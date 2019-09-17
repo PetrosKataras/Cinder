@@ -31,6 +31,7 @@ static GstGLContext* createGstGLContext( GstGLDisplay* display, GstGLContext* co
 #endif
 
 static bool			sUseGstGl = false;
+static bool			sEnableJetsonCaps = false;
 static const int	sEnableAsyncStateChange = false;
 
 GstData::GstData()
@@ -617,27 +618,42 @@ void GstPlayer::constructPipeline()
 		appSinkCallbacks.eos			= onGstEos;
 		appSinkCallbacks.new_preroll	= onGstPreroll;
 		appSinkCallbacks.new_sample		= onGstSample;
-
-		std::string capsDescr = "video/x-raw(memory:GLMemory), format=RGBA";
-		if( ! sUseGstGl ) {
-			capsDescr = "video/x-raw, format=RGBA";
-		}
-
 		gst_app_sink_set_callbacks( GST_APP_SINK( mGstData.appSink ), &appSinkCallbacks, this, 0 );
-		GstCaps* caps = gst_caps_from_string( capsDescr.c_str() );
+	}
+	auto setCapsFromString = [this]( const std::string capsStr ) {
+		GstCaps* caps = gst_caps_from_string( capsStr.c_str() );
 		gst_app_sink_set_caps( GST_APP_SINK( mGstData.appSink ), caps );
 		gst_caps_unref( caps );
-	}
-
+	};
 	GstPad *pad = nullptr;
 
 	if( sUseGstGl ) {
 #if defined( CINDER_GST_HAS_GL )
-		mGstData.glupload			= gst_element_factory_make( "glupload", "upload" );
-		if( ! mGstData.glupload ) CI_LOG_E( "Failed to create GL upload element!" );
-
-		mGstData.glcolorconvert		= gst_element_factory_make( "glcolorconvert", "convert" );
-		if( ! mGstData.glcolorconvert ) CI_LOG_E( "Failed to create GL convert element!" );
+		/* 
+			Check to see if we are on an NVIDIA Jetson since the path there is unique
+		 	in order to get hardware acceleration.
+		
+			nvvidconv is a Jetson-specific GStreamer plugin for doing color space conversion
+		 	on the Tegra chip. If available we assume that we are running on a Jetson SBC.
+		*/
+		mGstData.glcolorconvert		= gst_element_factory_make( "nvvidconv", "convert" );
+		if( ! mGstData.glcolorconvert ) {
+			// Not running on Jetson, proceed with standard 'glcolorconvert' and 'glupload' elements.
+			mGstData.glcolorconvert	= gst_element_factory_make( "glcolorconvert", "convert" );
+			if( ! mGstData.glcolorconvert ) {
+				CI_LOG_E( "Failed to create GL convert element!" );
+			}
+			mGstData.glupload = gst_element_factory_make( "glupload", "upload" );
+			if( ! mGstData.glupload ) {
+				CI_LOG_E( "Failed to create GL upload element!" );
+			}
+			setCapsFromString( "video/x-raw(memory:GLMemory), format=RGBA" );
+		}
+		else {
+			CI_LOG_I( "Found nvvidconv plugin - Assuming NVIDIA Jetson device" );
+			sEnableJetsonCaps = true;
+			setCapsFromString( "video/x-raw, format=RGBA" );
+		}
 
 		mGstData.rawCapsFilter		= gst_element_factory_make( "capsfilter", "rawcapsfilter" );
 		GstCaps* caps = nullptr;
@@ -647,7 +663,10 @@ void GstPlayer::constructPipeline()
 		}
 #else
 		if( mGstData.rawCapsFilter ) {
-			caps = gst_caps_from_string( "video/x-raw" );
+			if( sEnableJetsonCaps )
+				caps = gst_caps_from_string( "video/x-raw(memory:NVMM)" );
+			else
+				caps = gst_caps_from_string( "video/x-raw" );
 		}
 #endif
 		else {
@@ -658,12 +677,18 @@ void GstPlayer::constructPipeline()
 			g_object_set( G_OBJECT( mGstData.rawCapsFilter ), "caps", caps, nullptr );
 			gst_caps_unref( caps );
 		}
+		gst_bin_add( GST_BIN( mGstData.videoBin ), mGstData.rawCapsFilter );
+		if( mGstData.glupload != nullptr ) gst_bin_add( GST_BIN( mGstData.videoBin ), mGstData.glupload );
+		gst_bin_add_many( GST_BIN( mGstData.videoBin ), mGstData.glcolorconvert, mGstData.appSink, nullptr );
 
-		gst_bin_add_many( GST_BIN( mGstData.videoBin ),  mGstData.rawCapsFilter, mGstData.glupload, mGstData.glcolorconvert, mGstData.appSink, nullptr );
-
-		if( ! gst_element_link_many( mGstData.rawCapsFilter, mGstData.glupload, mGstData.glcolorconvert,  mGstData.appSink, nullptr ) ) {
-			CI_LOG_E( "Failed to link video elements!" );
+		auto linkElementsSuccess = false;
+		if( mGstData.glupload != nullptr ) {
+			linkElementsSuccess = gst_element_link_many( mGstData.rawCapsFilter, mGstData.glupload, mGstData.glcolorconvert, mGstData.appSink, nullptr );
 		}
+		else {
+			linkElementsSuccess = gst_element_link_many( mGstData.rawCapsFilter, mGstData.glcolorconvert, mGstData.appSink, nullptr );
+		}
+		if( ! linkElementsSuccess ) CI_LOG_E( "Failed to link video elements!" );
 
 		pad = gst_element_get_static_pad( mGstData.rawCapsFilter, "sink" );
 		gst_element_add_pad( mGstData.videoBin, gst_ghost_pad_new( "sink", pad ) );
@@ -671,6 +696,7 @@ void GstPlayer::constructPipeline()
 #endif
 	}
 	else{
+		setCapsFromString( "video/x-raw, format=RGBA" );
 		gst_bin_add( GST_BIN( mGstData.videoBin ), mGstData.appSink );
 		pad = gst_element_get_static_pad( mGstData.appSink, "sink" );
 		gst_element_add_pad( mGstData.videoBin, gst_ghost_pad_new( "sink", pad ) );
@@ -1130,7 +1156,7 @@ GLint GstPlayer::getTextureID( GstBuffer* newBuffer )
 ci::gl::Texture2dRef GstPlayer::getVideoTexture()
 {
 	if( mNewFrame ){
-		if( ! sUseGstGl ) {
+		if( ! sUseGstGl || sEnableJetsonCaps ) {
 			createTextureFromMemory();
 		}
 		else {
@@ -1211,7 +1237,7 @@ void GstPlayer::processNewSample( GstSample* sample )
 
 	mGstData.isPrerolled = true;
 
-	if( sUseGstGl ) {
+	if( sUseGstGl && ! sEnableJetsonCaps ) {
 #if defined( CINDER_GST_HAS_GL )
 		// Pull the memory buffer from the sample.
 		{
